@@ -222,7 +222,18 @@ const config = {
   responsive: true,
   displaylogo: false,
   scrollZoom: true,
-  toImageButtonOptions: {format: "png", filename: "WPT_modalities_scatter", scale: 2}
+
+  modeBarButtonsToRemove: [
+    "zoom2d",
+    "select2d",
+    "lasso2d"
+  ],
+
+  toImageButtonOptions: {
+    format: "png",
+    filename: "WPT_modalities_scatter",
+    scale: 2
+  }
 };
 
 Plotly.newPlot("plot", traces, layout, config);
