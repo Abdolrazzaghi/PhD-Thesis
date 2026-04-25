@@ -240,7 +240,9 @@ const config = {
 };
 
 Plotly.newPlot("plot", traces, layout, config);
-
+<div class="subtitle">
+  Each marker represents one published study. Drag to pan. Use the + / − buttons to zoom on mobile.
+</div>
 document.querySelectorAll('input[name="xscale"]').forEach(el => {
   el.addEventListener("change", e => Plotly.relayout("plot", {"xaxis.type": e.target.value}));
 });
