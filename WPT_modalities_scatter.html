@@ -51,6 +51,30 @@
     cursor: pointer;
     user-select: none;
   }
+
+  /* Make Plotly modebar buttons larger and easier to tap on phones */
+.modebar {
+  top: 8px !important;
+  right: 8px !important;
+}
+
+.modebar-btn {
+  width: 36px !important;
+  height: 36px !important;
+  padding: 6px !important;
+}
+
+.modebar-btn svg {
+  width: 24px !important;
+  height: 24px !important;
+}
+
+.modebar-group {
+  background: rgba(255, 255, 255, 0.92) !important;
+  border: 1px solid #ccc !important;
+  border-radius: 6px !important;
+  margin-left: 4px !important;
+}
 </style>
 </head>
 <body>
@@ -61,6 +85,8 @@
       Drag to pan. Use the + / − buttons to zoom on mobile.
     </div>
 
+        <div id="plot"></div>
+    
     <div class="axis-toggle">
       <strong>X axis:</strong>
       <label><input type="radio" name="xscale" value="linear" checked> Linear</label>
@@ -71,7 +97,7 @@
       <label><input type="radio" name="yscale" value="log" checked> Log</label>
     </div>
 
-    <div id="plot"></div>
+
 
     <div class="notes">
       <strong>Marker legend:</strong> black filled square — Radiative; red open ring — Magnetoelectric;
@@ -223,7 +249,7 @@ const layout = {
 const config = {
   responsive: true,
   displaylogo: false,
-
+displayModeBar: true,
   // Enables wheel / trackpad / two-finger scroll zoom where supported
   scrollZoom: true,
 
