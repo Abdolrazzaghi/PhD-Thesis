@@ -546,12 +546,48 @@ PLOT_DIV.on("plotly_unhover", function() {
 });
 
 // Touch (and desktop click): tapping/clicking a symbol pins the box.
-// On touch devices this is the only way the box appears, and it stays
-// until another symbol is tapped.
+// We also record the timestamp so that the synthetic click which fires
+// on the wrapper right after a marker tap can be distinguished from a
+// deliberate tap on empty space.
+let _lastSymbolTapAt = 0;
 PLOT_DIV.on("plotly_click", function(data) {
   if (data && data.points && data.points.length > 0) {
+    _lastSymbolTapAt = Date.now();
     pinPoint(data.points[0]);
   }
+});
+
+// Background tap dismissal: tapping/clicking on empty space inside the
+// chart (not a symbol, not the legend, not the modebar) un-pins the
+// box. We use a 350ms grace period after a symbol tap to ignore the
+// synthetic click that iOS fires on the wrapper right after a marker
+// tap. Without this guard the box would disappear the instant the user
+// taps a symbol, which is the bug we hit before.
+WRAP.addEventListener("click", function(ev) {
+  // Defer one tick so plotly_click (if any) fires first and sets the
+  // _lastSymbolTapAt timestamp.
+  setTimeout(function() {
+    if (Date.now() - _lastSymbolTapAt < 350) {
+      // Recent symbol tap: this click is the synthetic follow-up. Ignore.
+      return;
+    }
+    const t = ev.target;
+    // Check whether the click hit a marker path inside the points layer.
+    // Plotly draws each scatter point as an SVG <path class="point"> in
+    // a parent group with class "points". Hitting either un-counts as
+    // a background tap.
+    const hitMarker = t && (
+      (t.classList && t.classList.contains("point")) ||
+      (t.parentElement && t.parentElement.classList &&
+       t.parentElement.classList.contains("points"))
+    );
+    const hitLegend  = t && t.closest && t.closest(".legend");
+    const hitModeBar = t && t.closest && t.closest(".modebar");
+    const hitInfoBox = t === BOX || (BOX.contains && BOX.contains(t));
+    if (!hitMarker && !hitLegend && !hitModeBar && !hitInfoBox) {
+      unpinPoint();
+    }
+  }, 0);
 });
 
 // Reposition the overlay whenever the chart relayouts (zoom, pan, axis
