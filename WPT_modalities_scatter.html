@@ -176,6 +176,8 @@ const traces = modalities.map(mod => {
 
 const layout = {
   margin: {l: 70, r: 30, t: 30, b: 60},
+    // Make the default mouse/touch drag behavior pan instead of box zoom
+  dragmode: "pan",
   xaxis: {
     title: {text: "Implant Depth [mm]"},
     type: "linear",
