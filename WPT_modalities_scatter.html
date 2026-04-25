@@ -601,6 +601,154 @@ PLOT_DIV.on("plotly_relayout", function() {
 window.addEventListener("resize", function() {
   setTimeout(redrawOverlay, 50);
 });
+
+// =====================================================================
+//  TWO-FINGER PINCH ZOOM (Google Maps style)
+//
+//  Plotly's built-in touch support handles single-finger drag-to-pan
+//  but does NOT handle two-finger pinch zoom. We implement it here by
+//  listening to native touch events on the plot wrapper and calling
+//  Plotly.relayout with new axis ranges as the user pinches.
+//
+//  The implementation anchors the gesture to the data point under the
+//  pinch midpoint, so the chart visually grows or shrinks "from under
+//  the fingers" exactly like Google Maps and Apple Maps.
+// =====================================================================
+
+(function setupPinchZoom() {
+  // State captured at the start of a two-finger gesture
+  let active = false;
+  let startDist = 0;
+  // Axis state at gesture start, captured in CALC space (log10 for log
+  // axes, raw value for linear axes), measured per axis.
+  let startX = null;  // {a, b, W}
+  let startY = null;  // {a, b, H}
+  // Pixel coordinates of the touch midpoint at gesture start, measured
+  // relative to the plot drawing area (not the wrapper).
+  let startMidPlotX = 0;
+  let startMidPlotY = 0;
+
+  // Helper: get plot drawing-area bounds in screen coordinates so we
+  // can convert touch clientX/clientY into plot-area pixels.
+  function getPlotRect() {
+    const fl = PLOT_DIV._fullLayout;
+    if (!fl) return null;
+    const wrapRect = WRAP.getBoundingClientRect();
+    return {
+      left:   wrapRect.left + fl.margin.l,
+      top:    wrapRect.top  + fl.margin.t,
+      width:  fl.width  - fl.margin.l - fl.margin.r,
+      height: fl.height - fl.margin.t - fl.margin.b
+    };
+  }
+
+  // Convert a touch event's two fingers to {midX, midY, dist} in plot-
+  // area pixel coordinates.
+  function pinchInfo(touches) {
+    const r = getPlotRect();
+    if (!r) return null;
+    const t0 = touches[0], t1 = touches[1];
+    const x0 = t0.clientX - r.left, y0 = t0.clientY - r.top;
+    const x1 = t1.clientX - r.left, y1 = t1.clientY - r.top;
+    return {
+      midX: (x0 + x1) / 2,
+      midY: (y0 + y1) / 2,
+      dist: Math.hypot(x1 - x0, y1 - y0),
+      W: r.width,
+      H: r.height
+    };
+  }
+
+  PLOT_DIV.addEventListener("touchstart", function(ev) {
+    if (ev.touches.length !== 2) return;
+    const fl = PLOT_DIV._fullLayout;
+    if (!fl) return;
+
+    const info = pinchInfo(ev.touches);
+    if (!info || info.dist < 1) return;
+
+    // Capture axis ranges in CALC space. For linear axes this is the
+    // raw range values; for log axes Plotly stores range as log10 of
+    // the data values. We always work in calc space here so the math
+    // is uniform.
+    startX = { a: fl.xaxis.range[0], b: fl.xaxis.range[1], W: info.W };
+    startY = { a: fl.yaxis.range[0], b: fl.yaxis.range[1], H: info.H };
+
+    // Note: Plotly's y axis range is stored with [bottom, top], and
+    // pixel y grows DOWNWARD from the plot top edge. So the calc value
+    // at a given plot-pixel y is: cy = b + (py/H) * (a - b)  -- i.e.
+    // top of plot corresponds to b (range[1]), bottom to a (range[0]).
+
+    startMidPlotX = info.midX;
+    startMidPlotY = info.midY;
+    startDist = info.dist;
+    active = true;
+
+    // Stop the gesture from being interpreted as a pan by Plotly.
+    ev.preventDefault();
+  }, { passive: false });
+
+  PLOT_DIV.addEventListener("touchmove", function(ev) {
+    if (!active || ev.touches.length !== 2) return;
+    const info = pinchInfo(ev.touches);
+    if (!info || info.dist < 1) return;
+
+    // Zoom factor: dist > startDist means fingers moved apart -> zoom
+    // IN, which means the visible range shrinks. So scale = startDist
+    // / dist gives a value < 1 when zooming in.
+    const scale = startDist / info.dist;
+
+    // Compute new X axis range so the data value originally under the
+    // gesture midpoint stays under the midpoint as it moves.
+    //
+    //   At start, midpoint pixel was startMidPlotX, axis range was
+    //   [startX.a, startX.b] over width startX.W. The data value under
+    //   the start midpoint is:
+    //     cmX = startX.a + (startMidPlotX / startX.W) * (startX.b - startX.a)
+    //
+    //   The new range width is (startX.b - startX.a) * scale.
+    //   The new midpoint pixel is info.midX (where fingers are NOW).
+    //   We require: cmX = newA + (info.midX / startX.W) * newWidth
+    //   Therefore:  newA = cmX - (info.midX / startX.W) * newWidth
+    //              newB = newA + newWidth
+    const oldXWidth = startX.b - startX.a;
+    const cmX = startX.a + (startMidPlotX / startX.W) * oldXWidth;
+    const newXWidth = oldXWidth * scale;
+    const newXa = cmX - (info.midX / startX.W) * newXWidth;
+    const newXb = newXa + newXWidth;
+
+    // Same logic for Y, but remember y-pixels grow downward while the
+    // axis range is [bottom, top]. Plot-pixel y=0 is at the TOP, which
+    // corresponds to range[1]; y=H is at the BOTTOM, which is range[0].
+    //   data value under start midpoint:
+    //     cmY = startY.b + (startMidPlotY / startY.H) * (startY.a - startY.b)
+    const oldYWidth = startY.b - startY.a;            // positive
+    const cmY = startY.b + (startMidPlotY / startY.H) * (startY.a - startY.b);
+    const newYWidth = oldYWidth * scale;
+    // We want: cmY = newB + (info.midY / startY.H) * (newA - newB)
+    //   with newB - newA = newYWidth (so newA = newB - newYWidth).
+    //   cmY = newB + (info.midY / startY.H) * (-newYWidth)
+    //   newB = cmY + (info.midY / startY.H) * newYWidth
+    const newYb = cmY + (info.midY / startY.H) * newYWidth;
+    const newYa = newYb - newYWidth;
+
+    Plotly.relayout(PLOT_DIV, {
+      "xaxis.range": [newXa, newXb],
+      "yaxis.range": [newYa, newYb]
+    });
+
+    ev.preventDefault();
+  }, { passive: false });
+
+  function endGesture(ev) {
+    if (!active) return;
+    if (ev.touches && ev.touches.length < 2) {
+      active = false;
+    }
+  }
+  PLOT_DIV.addEventListener("touchend",    endGesture, { passive: true });
+  PLOT_DIV.addEventListener("touchcancel", endGesture, { passive: true });
+})();
 </script>
 </body>
 </html>
