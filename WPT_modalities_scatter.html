@@ -28,13 +28,69 @@
     color: #555;
     margin-bottom: 18px;
   }
-  #plot {
+  #plot-wrap {
+    position: relative;
     width: 100%;
     height: 70vh;
     min-height: 480px;
+  }
+  #plot {
+    width: 100%;
+    height: 100%;
     background: white;
     border: 1px solid #e5e5e5;
     border-radius: 6px;
+  }
+  /* SVG overlay for the leader line. Sits on top of the chart but
+     does not capture mouse events, so hover/zoom still work. */
+  #leader-svg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 5;
+    overflow: visible;
+  }
+  /* HTML overlay for the information box. Also non-interactive so
+     it never blocks the chart underneath. */
+  #info-box {
+    position: absolute;
+    display: none;
+    pointer-events: none;
+    z-index: 6;
+    background: rgba(255, 255, 255, 0.98);
+    border: 1px solid #222;
+    border-radius: 4px;
+    padding: 8px 10px;
+    font-family: "Helvetica Neue", Arial, sans-serif;
+    font-size: 12px;
+    color: #1a1a1a;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+    line-height: 1.45;
+    white-space: nowrap;
+  }
+  #info-box .modality-title {
+    font-weight: 700;
+    font-size: 13px;
+    margin-bottom: 4px;
+  }
+  #info-box .sep {
+    border-top: 1px solid #ddd;
+    margin: 4px 0;
+  }
+  #info-box .row {
+    margin: 1px 0;
+  }
+  #info-box .row b {
+    font-weight: 600;
+    color: #333;
+  }
+  #info-box .citation {
+    margin-top: 4px;
+    color: #555;
+    font-size: 11px;
   }
   .notes {
     margin-top: 16px;
@@ -85,7 +141,11 @@
       Drag to pan. Use the + / − buttons to zoom on mobile.
     </div>
 
-        <div id="plot"></div>
+        <div id="plot-wrap">
+      <div id="plot"></div>
+      <svg id="leader-svg"></svg>
+      <div id="info-box"></div>
+    </div>
     
     <div class="axis-toggle">
       <strong>X axis:</strong>
@@ -293,19 +353,30 @@ displayModeBar: true,
 Plotly.newPlot("plot", traces, layout, config);
 
 // =====================================================================
-//  PERSISTENT INFORMATION BOX
-//  - Appears when a symbol is hovered (desktop) or tapped (mobile).
-//  - Stays visible until another symbol is hovered/tapped, or the user
-//    clicks empty space inside the chart.
-//  - Anchored to the symbol with a fixed pixel offset toward the
-//    top-right, so the visual distance never changes with zoom level.
-//  - The chart layout is frozen: hovering does NOT cause the plot to
-//    move, resize, or rescale.
+//  CUSTOM INFO BOX OVERLAY
+//
+//  We do NOT use Plotly annotations here. Plotly annotations can cause
+//  the chart to relayout when shown, and their pixel-offset leader
+//  lines do not always render reliably. Instead we draw our own:
+//
+//    - The information box is a plain HTML <div> placed absolutely
+//      over the chart. Plotly never sees it, so the chart cannot move
+//      when it appears.
+//    - The leader line is an SVG <line> drawn from the symbol to the
+//      box, also as an overlay.
+//    - Both are anchored to the symbol's pixel position and follow it
+//      as the user zooms or pans, keeping a constant pixel offset.
 // =====================================================================
 
 const PLOT_DIV = document.getElementById("plot");
+const WRAP     = document.getElementById("plot-wrap");
+const SVG      = document.getElementById("leader-svg");
+const BOX      = document.getElementById("info-box");
 
-// Color of the modality title inside the information box
+// SVG namespace is needed when creating SVG elements via JS
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+// Modality title color used inside the info box
 const modalityTextColor = {
   "Radiative":       "#000000",
   "Magnetoelectric": "#d62728",
@@ -313,143 +384,184 @@ const modalityTextColor = {
   "Ultrasound":      "#e07b00"
 };
 
-// Fixed pixel offsets from the symbol to the box (top-right direction)
-const BOX_OFFSET_X =  70;   // pixels to the right
-const BOX_OFFSET_Y = -70;   // negative = upward (Plotly pixel convention)
+// Fixed pixel offset from the symbol to the NEAR corner of the box.
+// Small values keep the box close to the symbol, as you requested.
+const OFFSET_X = 18;   // pixels to the right of the symbol
+const OFFSET_Y = 18;   // pixels above the symbol
 
-function buildAnnotation(point) {
+// Currently pinned point — kept so we can reposition on zoom/pan/resize
+let pinnedPoint = null;
+
+// Build the inner HTML of the info box for a given Plotly point.
+function renderBoxContent(point) {
+  const modality = point.fullData.name;
+  const color = modalityTextColor[modality] || "#222";
   const x = point.x;
   const y = point.y;
-
-  const modality = point.fullData.name;
-  const modalityColor = modalityTextColor[modality] || "#222";
-
   const citation = point.customdata[0];
-  const freq     = point.customdata[1];
-  const area     = point.customdata[2];
-  const pte      = point.customdata[3];
+  const freq = point.customdata[1];
+  const area = point.customdata[2];
+  const pte  = point.customdata[3];
 
-  // Information lines. The first line is the colored modality title.
-  // We use a small inline style block to mimic a professional callout:
-  //   - title in modality color, bold, slightly larger
-  //   - a thin separator
-  //   - data rows with bold labels in dark grey, values in near-black
-  const text =
-    "<span style=\"color:" + modalityColor + ";font-size:13px\"><b>" + modality + "</b></span>" +
-    "<br><span style=\"color:#888\">────────────</span>" +
-    "<br><b>Depth:</b> "     + x    + " mm" +
-    "<br><b>n_PTE:</b> "     + y +
-    "<br><b>Frequency:</b> " + freq + " MHz" +
-    "<br><b>RX Area:</b> "   + area + " mm²" +
-    "<br><b>PTE:</b> "       + pte  + " %" +
-    "<br><span style=\"color:#888\">────────────</span>" +
-    "<br><span style=\"color:#444;font-size:11px\">" + citation + "</span>";
+  BOX.innerHTML =
+    '<div class="modality-title" style="color:' + color + '">' + modality + '</div>' +
+    '<div class="sep"></div>' +
+    '<div class="row"><b>Depth:</b> '     + x    + ' mm</div>' +
+    '<div class="row"><b>n_PTE:</b> '     + y    + '</div>' +
+    '<div class="row"><b>Frequency:</b> ' + freq + ' MHz</div>' +
+    '<div class="row"><b>RX Area:</b> '   + area + ' mm²</div>' +
+    '<div class="row"><b>PTE:</b> '       + pte  + ' %</div>' +
+    '<div class="sep"></div>' +
+    '<div class="citation">' + citation + '</div>';
+}
 
-  return {
-    // Arrow tip sits on the symbol (data coordinates)
-    x: x,
-    y: y,
-    xref: "x",
-    yref: "y",
+// Convert a data-space (x, y) coordinate into pixel coordinates inside
+// the wrapper element. Plotly stores axis transforms on the gd._fullLayout
+// object after newPlot has rendered.
+function dataToPixels(xData, yData) {
+  const fl = PLOT_DIV._fullLayout;
+  if (!fl || !fl.xaxis || !fl.yaxis) return null;
 
-    // Text box position is a fixed pixel offset from the symbol.
-    // This is the key property: pixel-based offset means the visual
-    // distance between symbol and box stays constant at any zoom level.
-    axref: "pixel",
-    ayref: "pixel",
-    ax: BOX_OFFSET_X,
-    ay: BOX_OFFSET_Y,
+  // d2p converts data values to pixels measured from the plot area's
+  // top-left corner (the inner drawing area, not the full container).
+  const xPlotPx = fl.xaxis.d2p(xData);
+  const yPlotPx = fl.yaxis.d2p(yData);
 
-    text: text,
-    showarrow: true,
+  if (xPlotPx == null || yPlotPx == null || isNaN(xPlotPx) || isNaN(yPlotPx)) {
+    return null;
+  }
 
-    // Connector line: thin, dark, no arrowhead — looks like a leader line
-    arrowhead: 0,
-    arrowwidth: 1.2,
-    arrowcolor: "#222",
-    standoff: 6,        // small gap so the line doesn't touch the symbol
-    startstandoff: 0,
+  // Add the plot area offset (margins) so we get coordinates relative
+  // to the wrapper, which is what our absolutely-positioned overlays use.
+  const xWrap = xPlotPx + fl.margin.l;
+  const yWrap = yPlotPx + fl.margin.t;
+  return { x: xWrap, y: yWrap };
+}
 
-    // Box appearance
-    bgcolor: "rgba(255,255,255,0.98)",
-    bordercolor: "#222",
-    borderwidth: 1,
-    borderpad: 8,
-    align: "left",
+// Position the info box and draw the leader line based on the pinned
+// point's current pixel coordinates. Called on hover/click and again on
+// every zoom, pan, or resize.
+function redrawOverlay() {
+  if (!pinnedPoint) {
+    BOX.style.display = "none";
+    clearLeaderLine();
+    return;
+  }
 
-    font: {
-      family: "Helvetica Neue, Arial, sans-serif",
-      size: 12,
-      color: "#1a1a1a"
-    },
+  const px = dataToPixels(pinnedPoint.x, pinnedPoint.y);
+  if (!px) {
+    BOX.style.display = "none";
+    clearLeaderLine();
+    return;
+  }
 
-    // Tag this annotation so we can identify ours vs. any others
-    name: "wpt-info-box"
+  // Place the box at a small fixed offset toward the top-right.
+  // The box's bottom-LEFT corner anchors near the symbol so the
+  // leader line is short and the box hangs up-and-to-the-right.
+  const boxLeft = px.x + OFFSET_X;
+  const boxTop  = px.y - OFFSET_Y - BOX.offsetHeight;  // subtract height to put bottom near offset
+
+  BOX.style.left = boxLeft + "px";
+  BOX.style.top  = boxTop  + "px";
+  BOX.style.display = "block";
+
+  // After display, offsetHeight becomes accurate; recompute top so the
+  // box's bottom-left sits at (px.x + OFFSET_X, px.y - OFFSET_Y).
+  const correctedTop = px.y - OFFSET_Y - BOX.offsetHeight;
+  BOX.style.top = correctedTop + "px";
+
+  // Leader line: from the symbol to the bottom-left corner of the box
+  drawLeaderLine(px.x, px.y, boxLeft, correctedTop + BOX.offsetHeight);
+}
+
+// SVG leader line management
+function clearLeaderLine() {
+  while (SVG.firstChild) SVG.removeChild(SVG.firstChild);
+}
+
+function drawLeaderLine(x1, y1, x2, y2) {
+  clearLeaderLine();
+  const line = document.createElementNS(SVG_NS, "line");
+  line.setAttribute("x1", x1);
+  line.setAttribute("y1", y1);
+  line.setAttribute("x2", x2);
+  line.setAttribute("y2", y2);
+  line.setAttribute("stroke", "#222");
+  line.setAttribute("stroke-width", "1.2");
+  line.setAttribute("stroke-linecap", "round");
+  SVG.appendChild(line);
+}
+
+// Pin a Plotly point: store reference info needed to reposition later.
+function pinPoint(point) {
+  pinnedPoint = {
+    x: point.x,
+    y: point.y,
+    fullData: point.fullData,
+    customdata: point.customdata
   };
+  renderBoxContent(point);
+  // Two-pass redraw: first to measure, second to place correctly.
+  BOX.style.display = "block";
+  BOX.style.left = "-9999px";
+  BOX.style.top  = "-9999px";
+  // Force layout so offsetHeight is accurate
+  // eslint-disable-next-line no-unused-expressions
+  BOX.offsetHeight;
+  redrawOverlay();
 }
 
-// Update the persistent annotation. We use Plotly.relayout with ONLY
-// the annotations property — axis ranges and layout are untouched, so
-// the chart does not move or rescale when a box appears or changes.
-function showPointAnnotation(point) {
-  Plotly.relayout(PLOT_DIV, { annotations: [buildAnnotation(point)] });
+function unpinPoint() {
+  pinnedPoint = null;
+  BOX.style.display = "none";
+  clearLeaderLine();
 }
 
-function clearAnnotation() {
-  Plotly.relayout(PLOT_DIV, { annotations: [] });
-}
-
-// Desktop: hovering a symbol sets the persistent box.
+// Desktop: hovering a symbol pins it.
 PLOT_DIV.on("plotly_hover", function(data) {
   if (data && data.points && data.points.length > 0) {
-    showPointAnnotation(data.points[0]);
+    pinPoint(data.points[0]);
   }
 });
 
-// IMPORTANT: do NOT clear on plotly_unhover. The user wants the box to
-// remain until another symbol is hovered or background is clicked.
-
-// Mobile/touch: tapping a symbol sets the persistent box.
+// Mobile: tapping a symbol pins it. Plotly fires plotly_click on tap.
 PLOT_DIV.on("plotly_click", function(data) {
   if (data && data.points && data.points.length > 0) {
-    showPointAnnotation(data.points[0]);
+    pinPoint(data.points[0]);
   }
 });
 
-// Clicking empty plot background clears the box. We detect this by
-// listening on the plot container and checking that the click did not
-// land on a symbol (plotly_click already handles symbol clicks above
-// and stops propagation in newer Plotly versions; we keep this as a
-// safety net using a small delay).
-let _suppressBgClear = false;
-PLOT_DIV.addEventListener("click", function(ev) {
-  // If the click hit a marker, plotly_click will fire too and set the
-  // suppress flag; we wait a tick before deciding to clear.
+// Reposition the overlay whenever the chart relayouts (zoom, pan, axis
+// scale change, modebar reset). plotly_relayout fires after every such
+// event with the new ranges already applied to _fullLayout.
+PLOT_DIV.on("plotly_relayout", function() {
+  redrawOverlay();
+});
+
+// Reposition on window resize too.
+window.addEventListener("resize", function() {
+  // Plotly already has its own resize handling thanks to responsive:true;
+  // we just need to redraw our overlay after the chart settles.
+  setTimeout(redrawOverlay, 50);
+});
+
+// Click on empty plot background unpins the box. We detect background
+// clicks by listening on the wrapper and checking the click target.
+WRAP.addEventListener("click", function(ev) {
+  // Defer so that plotly_click (if any) fires first
   setTimeout(function() {
-    if (_suppressBgClear) {
-      _suppressBgClear = false;
-      return;
-    }
-    // Only clear if the click target is the plot background, not a
-    // marker, axis, legend, or modebar button.
     const t = ev.target;
-    const isMarker = t && t.classList && (
-      t.classList.contains("point") ||
-      (t.parentElement && t.parentElement.classList && t.parentElement.classList.contains("points"))
-    );
-    const isLegend = t && t.closest && t.closest(".legend");
-    const isModeBar = t && t.closest && t.closest(".modebar");
-    if (!isMarker && !isLegend && !isModeBar) {
-      clearAnnotation();
+    // Hits on the marker layer are SVG <path> elements with class "point"
+    const hitMarker = t && t.tagName === "path" && t.parentElement &&
+                      t.parentElement.classList.contains("points");
+    const hitLegend = t && t.closest && t.closest(".legend");
+    const hitModeBar = t && t.closest && t.closest(".modebar");
+    const hitInfoBox = t === BOX || (BOX.contains && BOX.contains(t));
+    if (!hitMarker && !hitLegend && !hitModeBar && !hitInfoBox) {
+      unpinPoint();
     }
   }, 0);
 });
-PLOT_DIV.on("plotly_click", function() { _suppressBgClear = true; });
-
-
-
-  
-  
 </script>
 </body>
 </html>
