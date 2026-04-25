@@ -222,9 +222,125 @@
   border-radius: 6px !important;
   margin-left: 4px !important;
 }
+/* ===================================================================
+   PORTRAIT PHONE ROTATION PROMPT
+
+   Goal: when a user opens the page on a phone held vertically, the
+   chart's fixed 6:4 aspect ratio makes the figure too small to be
+   readable. Rather than degrading quality with smaller fonts and
+   markers, we ask the user to rotate the phone to landscape, where
+   the layout works beautifully.
+
+   Strategy:
+     - The #rotate-prompt overlay is hidden by default.
+     - It becomes visible only when the viewport is narrow (under
+       600px wide) AND in portrait orientation (height > width).
+     - On landscape phones, tablets, and desktops it stays hidden,
+       so the chart renders normally everywhere else.
+
+   This is a pure CSS solution — no JavaScript, no orientation API,
+   no resize listeners. The browser re-evaluates the media query
+   automatically when the device rotates, so the overlay appears or
+   disappears in real time without any code from us.
+================================================================= */
+#rotate-prompt {
+  display: none;  /* hidden by default; media query enables on portrait phones */
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: #fafafa;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  box-sizing: border-box;
+}
+.rotate-card {
+  max-width: 320px;
+  text-align: center;
+  font-family: "Helvetica Neue", Arial, sans-serif;
+  color: #222;
+}
+.rotate-icon {
+  margin-bottom: 18px;
+  display: flex;
+  justify-content: center;
+  /* Subtle "tilt" animation hints at the action the user should take. */
+  animation: rotateHint 2.4s ease-in-out infinite;
+  transform-origin: center center;
+}
+@keyframes rotateHint {
+  0%, 40%   { transform: rotate(0deg); }
+  60%, 100% { transform: rotate(-90deg); }
+}
+.rotate-title {
+  font-size: 1.15rem;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+.rotate-text {
+  font-size: 0.95rem;
+  line-height: 1.45;
+  color: #444;
+  margin-bottom: 14px;
+}
+.rotate-hint {
+  font-size: 0.8rem;
+  line-height: 1.4;
+  color: #777;
+  background: rgba(122, 90, 64, 0.07);
+  border: 1px solid rgba(122, 90, 64, 0.18);
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+
+/* Show the overlay only on phones in portrait orientation.
+   Width threshold of 600px excludes tablets in portrait, which have
+   enough horizontal real estate to render the chart legibly even
+   when held vertically. */
+@media (max-width: 600px) and (orientation: portrait) {
+  #rotate-prompt {
+    display: flex;
+  }
+  /* Hide the rest of the page so the user only sees the prompt. */
+  .container {
+    visibility: hidden;
+  }
+}
 </style>
 </head>
 <body>
+  <!-- Portrait-phone rotation prompt. This overlay is hidden by default
+       and only becomes visible when the viewport is narrower than 600 px
+       AND the orientation is portrait. The CSS media query at the top
+       of the stylesheet controls visibility. The overlay covers the
+       full viewport so the user cannot interact with the chart until
+       they rotate. Once in landscape, the overlay disappears and the
+       chart works normally. -->
+  <div id="rotate-prompt">
+    <div class="rotate-card">
+      <div class="rotate-icon" aria-hidden="true">
+        <svg viewBox="0 0 64 64" width="64" height="64" xmlns="http://www.w3.org/2000/svg">
+          <rect x="20" y="6"  width="24" height="44" rx="4" ry="4"
+                fill="none" stroke="#7a5a40" stroke-width="2.5"/>
+          <circle cx="32" cy="46" r="1.6" fill="#7a5a40"/>
+          <path d="M 8 32 Q 16 12 32 12" fill="none" stroke="#7a5a40"
+                stroke-width="2" stroke-linecap="round"/>
+          <polygon points="32,8 36,12 32,16" fill="#7a5a40"/>
+        </svg>
+      </div>
+      <div class="rotate-title">Please rotate your phone</div>
+      <div class="rotate-text">
+        This figure is designed for landscape viewing.
+        Turn your phone sideways to see the data clearly.
+      </div>
+      <div class="rotate-hint">
+        If the screen does not rotate, check that
+        <b>Portrait Orientation Lock</b> is turned off
+        in Control Center.
+      </div>
+    </div>
+  </div>
+
   <div class="container">
     <h1>Wireless Power Transfer Modalities — PTE vs. Implant Depth</h1>
     <div class="subtitle">
@@ -256,10 +372,10 @@
            coordinate y = 1e-4 and the horizontal midpoint of each
            region's depth range. Updated on every plotly_relayout
            so they pan and zoom with the chart. -->
-      <div class="region-label vertical" data-region="scalp"  data-x="2.5"  data-y="0.001">SCALP + SKULL</div>
+      <div class="region-label vertical" data-region="scalp"  data-x="2.5"  data-y="0.0001">SCALP + SKULL</div>
       <div class="region-label"          data-region="cortex" data-x="10"   data-y="0.0001">CORTEX</div>
       <div class="region-label"          data-region="white"  data-x="22.5" data-y="0.0001">WHITE MATTER</div>
-      <div class="region-label"          data-region="deep"   data-x="50"   data-y="0.0001">DEEP BRAIN</div>
+      <div class="region-label"          data-region="deep"   data-x="90"   data-y="0.0001">DEEP BRAIN</div>
     </div>
   </div>
 
