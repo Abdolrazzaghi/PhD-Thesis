@@ -214,14 +214,14 @@ customdata: rows.map(r => [wrapHoverText(r.label, 45), r.freq, r.area, r.pte]),
       color: s.fill,
       line: { color: s.line, width: s.lineWidth }
     },
-    hovertemplate:
-      "<b>%{customdata[0]}</b><br>" +
-      "Depth: %{x} mm<br>" +
-      "n_PTE: %{y}<br>" +
-      "Frequency: %{customdata[1]} MHz<br>" +
-      "RX Area: %{customdata[2]} mm²<br>" +
-      "PTE: %{customdata[3]} %" +
-      "<extra>" + mod + "</extra>"
+hovertemplate:
+  "<b>Depth:</b> %{x} mm<br>" +
+  "<b>n_PTE:</b> %{y}<br>" +
+  "<b>Frequency:</b> %{customdata[1]} MHz<br>" +
+  "<b>RX Area:</b> %{customdata[2]} mm²<br>" +
+  "<b>PTE:</b> %{customdata[3]} %<br><br>" +
+  "%{customdata[0]}" +
+  "<extra>" + mod + "</extra>"
   };
 });
 
