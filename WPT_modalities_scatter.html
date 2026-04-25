@@ -176,6 +176,7 @@ const styleByModality = {
 
   // Wrap long citation text inside Plotly hover labels
 function wrapHoverText(text, maxChars = 55) {
+  const citation = point.customdata[0];
   const words = text.split(" ");
   let lines = [];
   let currentLine = "";
@@ -215,12 +216,9 @@ customdata: rows.map(r => [wrapHoverText(r.label, 45), r.freq, r.area, r.pte]),
       line: { color: s.line, width: s.lineWidth }
     },
 hovertemplate:
+  "<b>Tap/click for details</b><br>" +
   "<b>Depth:</b> %{x} mm<br>" +
-  "<b>n_PTE:</b> %{y}<br>" +
-  "<b>Frequency:</b> %{customdata[1]} MHz<br>" +
-  "<b>RX Area:</b> %{customdata[2]} mm²<br>" +
-  "<b>PTE:</b> %{customdata[3]} %<br><br>" +
-  "%{customdata[0]}" +
+  "<b>PTE:</b> %{customdata[3]} %" +
   "<extra>" + mod + "</extra>"
   };
 });
@@ -292,6 +290,66 @@ displayModeBar: true,
 
 Plotly.newPlot("plot", traces, layout, config);
 
+  // =====================================================================
+//  Mobile-friendly tap/click annotation with arrow
+// =====================================================================
+document.getElementById("plot").on("plotly_click", function(data) {
+  const point = data.points[0];
+
+  // Data coordinates of the selected marker
+  const x = point.x;
+  const y = point.y;
+
+  // Hover/citation information
+  const citation = point.customdata[0];
+  const freq = point.customdata[1];
+  const area = point.customdata[2];
+  const pte = point.customdata[3];
+
+  // Text shown inside the annotation box
+  const annotationText =
+    "<b>Depth:</b> " + x + " mm<br>" +
+    "<b>n_PTE:</b> " + y + "<br>" +
+    "<b>Frequency:</b> " + freq + " MHz<br>" +
+    "<b>RX Area:</b> " + area + " mm²<br>" +
+    "<b>PTE:</b> " + pte + " %<br><br>" +
+    citation;
+
+  // Place annotation box away from the marker while keeping arrow attached
+  const annotation = {
+    x: x,
+    y: y,
+    xref: "x",
+    yref: "y",
+    text: annotationText,
+    showarrow: true,
+    arrowhead: 2,
+    arrowsize: 1,
+    arrowwidth: 1.5,
+    arrowcolor: "#333",
+
+    // Positive ax moves box left of point; negative ax moves box right of point.
+    // Positive ay moves box above point; negative ay moves box below point.
+    ax: 90,
+    ay: -90,
+
+    bgcolor: "rgba(255,255,255,0.96)",
+    bordercolor: "#888",
+    borderwidth: 1,
+    borderpad: 6,
+    align: "left",
+    font: {
+      family: "Helvetica Neue, Arial, sans-serif",
+      size: 12,
+      color: "#222"
+    }
+  };
+
+  Plotly.relayout("plot", {
+    annotations: [annotation]
+  });
+});
+  
 document.querySelectorAll('input[name="xscale"]').forEach(el => {
   el.addEventListener("change", e => Plotly.relayout("plot", {"xaxis.type": e.target.value}));
 });
