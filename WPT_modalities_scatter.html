@@ -214,11 +214,8 @@ customdata: rows.map(r => [wrapHoverText(r.label, 45), r.freq, r.area, r.pte]),
       color: s.fill,
       line: { color: s.line, width: s.lineWidth }
     },
-hovertemplate:
-  "<b>Tap/click for details</b><br>" +
-  "<b>Depth:</b> %{x} mm<br>" +
-  "<b>PTE:</b> %{customdata[3]} %" +
-  "<extra>" + mod + "</extra>"
+    hoverinfo: "none",
+    hovertemplate: null
   };
 });
 
@@ -289,17 +286,28 @@ displayModeBar: true,
 
 Plotly.newPlot("plot", traces, layout, config);
 
-  // =====================================================================
-//  Mobile-friendly tap/click annotation with arrow
+ // =====================================================================
+//  Hover/tap annotation with arrow-connected information box
 // =====================================================================
-document.getElementById("plot").on("plotly_click", function(data) {
-  const point = data.points[0];
 
+// Color used for the modality/category text inside the annotation box
+const modalityTextColor = {
+  "Radiative": "black",
+  "Magnetoelectric": "red",
+  "Inductive": "blue",
+  "Ultrasound": "darkorange"
+};
+
+function showPointAnnotation(point) {
   // Data coordinates of the selected marker
   const x = point.x;
   const y = point.y;
 
-  // Hover/citation information
+  // Modality/category name comes from the trace name
+  const modality = point.fullData.name;
+  const modalityColor = modalityTextColor[modality] || "#222";
+
+  // Information stored in customdata
   const citation = point.customdata[0];
   const freq = point.customdata[1];
   const area = point.customdata[2];
@@ -307,6 +315,7 @@ document.getElementById("plot").on("plotly_click", function(data) {
 
   // Text shown inside the annotation box
   const annotationText =
+    "<span style='color:" + modalityColor + "'><b>" + modality + "</b></span><br>" +
     "<b>Depth:</b> " + x + " mm<br>" +
     "<b>n_PTE:</b> " + y + "<br>" +
     "<b>Frequency:</b> " + freq + " MHz<br>" +
@@ -314,7 +323,7 @@ document.getElementById("plot").on("plotly_click", function(data) {
     "<b>PTE:</b> " + pte + " %<br><br>" +
     citation;
 
-  // Place annotation box away from the marker while keeping arrow attached
+  // Annotation box with arrow connected to the selected symbol
   const annotation = {
     x: x,
     y: y,
@@ -322,16 +331,19 @@ document.getElementById("plot").on("plotly_click", function(data) {
     yref: "y",
     text: annotationText,
     showarrow: true,
+
+    // Arrow styling
     arrowhead: 2,
     arrowsize: 1,
     arrowwidth: 1.5,
     arrowcolor: "#333",
 
-    // Positive ax moves box left of point; negative ax moves box right of point.
-    // Positive ay moves box above point; negative ay moves box below point.
-    ax: 90,
-    ay: -90,
+    // Move the text box away from the marker.
+    // ax/ay are pixel offsets from the marker.
+    ax: 95,
+    ay: -95,
 
+    // Box styling
     bgcolor: "rgba(255,255,255,0.96)",
     bordercolor: "#888",
     borderwidth: 1,
@@ -347,14 +359,18 @@ document.getElementById("plot").on("plotly_click", function(data) {
   Plotly.relayout("plot", {
     annotations: [annotation]
   });
+}
+
+// Desktop/laptop: show annotation when hovering
+document.getElementById("plot").on("plotly_hover", function(data) {
+  showPointAnnotation(data.points[0]);
+});
+
+// Phone/tablet: show the same annotation when tapping
+document.getElementById("plot").on("plotly_click", function(data) {
+  showPointAnnotation(data.points[0]);
 });
   
-document.querySelectorAll('input[name="xscale"]').forEach(el => {
-  el.addEventListener("change", e => Plotly.relayout("plot", {"xaxis.type": e.target.value}));
-});
-document.querySelectorAll('input[name="yscale"]').forEach(el => {
-  el.addEventListener("change", e => Plotly.relayout("plot", {"yaxis.type": e.target.value}));
-});
 </script>
 </body>
 </html>
