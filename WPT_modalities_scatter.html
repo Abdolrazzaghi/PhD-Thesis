@@ -174,9 +174,8 @@ const styleByModality = {
 //  Below this line you usually don't need to edit anything.
 // =====================================================================
 
-  // Wrap long citation text inside Plotly hover labels
+// Wrap long citation text inside Plotly hover labels
 function wrapHoverText(text, maxChars = 55) {
-  const citation = point.customdata[0];
   const words = text.split(" ");
   let lines = [];
   let currentLine = "";
