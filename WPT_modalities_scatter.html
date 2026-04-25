@@ -207,7 +207,7 @@ const traces = modalities.map(mod => {
     mode: "markers",
     x: rows.map(r => r.depth),
     y: rows.map(r => r.n_pte),
-    customdata: rows.map(r => [r.label, r.freq, r.area, r.pte]),
+customdata: rows.map(r => [wrapHoverText(r.label, 45), r.freq, r.area, r.pte]),
     marker: {
       symbol: s.symbol,
       size: s.size,
