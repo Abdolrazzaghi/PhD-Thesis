@@ -517,14 +517,38 @@ function unpinPoint() {
   clearLeaderLine();
 }
 
-// Desktop: hovering a symbol pins it.
+// Detect touch-primary devices (iPhone, iPad, Android). Touch devices
+// behave differently from desktop:
+//   - Desktop: hover shows the box, moving the cursor away or to a
+//     different symbol updates it. No tap behavior involved.
+//   - Touch: tap pins the box, and it stays pinned until another
+//     symbol is tapped. Background taps do NOT dismiss the box,
+//     because on iOS the synthetic click that follows a tap on a
+//     marker often arrives with a target that looks like background,
+//     which would otherwise immediately un-pin the box the user just
+//     pinned.
+const IS_TOUCH = (typeof window !== "undefined") &&
+                 ("ontouchstart" in window || navigator.maxTouchPoints > 0);
+
+// Desktop hover: show the box while the cursor is over a symbol, hide
+// it when the cursor leaves. On touch devices Plotly may emit synthetic
+// hover events on tap, which would cause the box to flicker, so we
+// ignore plotly_hover entirely on touch devices.
 PLOT_DIV.on("plotly_hover", function(data) {
+  if (IS_TOUCH) return;
   if (data && data.points && data.points.length > 0) {
     pinPoint(data.points[0]);
   }
 });
 
-// Mobile: tapping a symbol pins it. Plotly fires plotly_click on tap.
+PLOT_DIV.on("plotly_unhover", function() {
+  if (IS_TOUCH) return;
+  unpinPoint();
+});
+
+// Touch (and desktop click): tapping/clicking a symbol pins the box.
+// On touch devices this is the only way the box appears, and it stays
+// until another symbol is tapped.
 PLOT_DIV.on("plotly_click", function(data) {
   if (data && data.points && data.points.length > 0) {
     pinPoint(data.points[0]);
@@ -540,27 +564,7 @@ PLOT_DIV.on("plotly_relayout", function() {
 
 // Reposition on window resize too.
 window.addEventListener("resize", function() {
-  // Plotly already has its own resize handling thanks to responsive:true;
-  // we just need to redraw our overlay after the chart settles.
   setTimeout(redrawOverlay, 50);
-});
-
-// Click on empty plot background unpins the box. We detect background
-// clicks by listening on the wrapper and checking the click target.
-WRAP.addEventListener("click", function(ev) {
-  // Defer so that plotly_click (if any) fires first
-  setTimeout(function() {
-    const t = ev.target;
-    // Hits on the marker layer are SVG <path> elements with class "point"
-    const hitMarker = t && t.tagName === "path" && t.parentElement &&
-                      t.parentElement.classList.contains("points");
-    const hitLegend = t && t.closest && t.closest(".legend");
-    const hitModeBar = t && t.closest && t.closest(".modebar");
-    const hitInfoBox = t === BOX || (BOX.contains && BOX.contains(t));
-    if (!hitMarker && !hitLegend && !hitModeBar && !hitInfoBox) {
-      unpinPoint();
-    }
-  }, 0);
 });
 </script>
 </body>
