@@ -127,34 +127,40 @@
     color: #555;
     font-size: 11px;
   }
-  /* Region labels overlay: small rounded rectangles with vertical
-     text, anchored to data coordinates inside the chart at y = 1e-4
+  /* Region labels overlay: small rounded rectangles with text,
+     anchored to data coordinates inside the chart at y = 1e-4
      (100 micro-units). Pointer-events disabled so they never block
-     hover or pan/zoom on the chart underneath. */
+     hover or pan/zoom on the chart underneath.
+
+     By default the text is horizontal. The narrow Scalp + Skull
+     region (only 5 mm wide) uses the .vertical modifier to rotate
+     the text 90° so the label fits inside its rectangle. */
   .region-label {
     position: absolute;
     pointer-events: none;
     z-index: 4;
-    background: rgba(255, 255, 255, 0.92);
+    background: rgba(255, 255, 255, 0.5);
     border: 1px solid #7a5a40;
     border-radius: 8px;
-    padding: 8px 4px;
+    padding: 5px 8px;
     font-family: "Helvetica Neue", Arial, sans-serif;
     font-size: 11px;
     font-weight: 600;
     color: #000000;
     text-align: center;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-    /* Vertical text reading bottom-to-top. The combination of
-       writing-mode and the rotate(180deg) applied via JS produces
-       the correct upright vertical orientation. */
-    writing-mode: vertical-rl;
     white-space: nowrap;
     line-height: 1.2;
     letter-spacing: 0.3px;
     /* Hidden until JS positions it. */
     display: none;
     transform-origin: center center;
+  }
+  /* The Scalp + Skull region is narrow (0–5 mm), so its label is
+     rotated to vertical orientation reading bottom-to-top. */
+  .region-label.vertical {
+    writing-mode: vertical-rl;
+    padding: 8px 4px;
   }
   /* Modality filter row: checkboxes for each WPT category, with a
      small color swatch next to each label so users immediately see
@@ -250,10 +256,10 @@
            coordinate y = 1e-4 and the horizontal midpoint of each
            region's depth range. Updated on every plotly_relayout
            so they pan and zoom with the chart. -->
-      <div class="region-label" data-region="scalp"  data-x="2.5"  data-y="0.0001">SCALP + SKULL</div>
-      <div class="region-label" data-region="cortex" data-x="10"   data-y="0.0001">CORTEX</div>
-      <div class="region-label" data-region="white"  data-x="22.5" data-y="0.0001">WHITE MATTER</div>
-      <div class="region-label" data-region="deep"   data-x="50"   data-y="0.0001">DEEP BRAIN</div>
+      <div class="region-label vertical" data-region="scalp"  data-x="2.5"  data-y="0.001">SCALP + SKULL</div>
+      <div class="region-label"          data-region="cortex" data-x="10"   data-y="0.0001">CORTEX</div>
+      <div class="region-label"          data-region="white"  data-x="22.5" data-y="0.0001">WHITE MATTER</div>
+      <div class="region-label"          data-region="deep"   data-x="50"   data-y="0.0001">DEEP BRAIN</div>
     </div>
   </div>
 
@@ -439,6 +445,12 @@ const layout = {
   yaxis: {
     title: {text: "Normalized PTE (PTE/Size) [%/mm2]"},
     type: "log",
+    // Default visible range when the page first loads, in log10 of
+    // the data values. The lower bound sits below 1e-4 (= 100µ) so
+    // the region labels anchored at y=1e-4 are clearly visible above
+    // the x-axis line rather than overlapping it. The upper bound
+    // covers the highest n_PTE value in the dataset (~6).
+    range: [-4.5, 1.1],
     gridcolor: "#eee",
     zeroline: false,
     showline: true,
@@ -716,9 +728,15 @@ function repositionRegionLabels() {
     el.style.display = "block";
     el.style.left = px.x + "px";
     el.style.top  = px.y + "px";
-    // Center on the anchor point AND apply the 180° rotation for
-    // vertical text (writing-mode rl is bottom-to-top after flipping).
-    el.style.transform = "translate(-50%, -50%) rotate(180deg)";
+    // Center on the anchor point. For vertical-text labels we also
+    // rotate 180° so the text reads bottom-to-top (combined with the
+    // writing-mode: vertical-rl set in CSS). Horizontal labels just
+    // get the centering translate.
+    if (el.classList.contains("vertical")) {
+      el.style.transform = "translate(-50%, -50%) rotate(180deg)";
+    } else {
+      el.style.transform = "translate(-50%, -50%)";
+    }
   });
 }
 
