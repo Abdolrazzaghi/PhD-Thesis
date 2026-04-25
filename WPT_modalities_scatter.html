@@ -292,23 +292,32 @@ displayModeBar: true,
 
 Plotly.newPlot("plot", traces, layout, config);
 
- // =====================================================================
-//  Hover/tap annotation with arrow-connected information box
+// =====================================================================
+//  PERSISTENT INFORMATION BOX
+//  - Appears when a symbol is hovered (desktop) or tapped (mobile).
+//  - Stays visible until another symbol is hovered/tapped, or the user
+//    clicks empty space inside the chart.
+//  - Anchored to the symbol with a fixed pixel offset toward the
+//    top-right, so the visual distance never changes with zoom level.
+//  - The chart layout is frozen: hovering does NOT cause the plot to
+//    move, resize, or rescale.
 // =====================================================================
 
-// =====================================================================
-//  Fixed-offset hover/tap annotation with black connector line
-// =====================================================================
+const PLOT_DIV = document.getElementById("plot");
 
-// Color used for the modality/category text inside the annotation box
+// Color of the modality title inside the information box
 const modalityTextColor = {
-  "Radiative": "black",
-  "Magnetoelectric": "red",
-  "Inductive": "blue",
-  "Ultrasound": "darkorange"
+  "Radiative":       "#000000",
+  "Magnetoelectric": "#d62728",
+  "Inductive":       "#1f4ed8",
+  "Ultrasound":      "#e07b00"
 };
 
-function showPointAnnotation(point) {
+// Fixed pixel offsets from the symbol to the box (top-right direction)
+const BOX_OFFSET_X =  70;   // pixels to the right
+const BOX_OFFSET_Y = -70;   // negative = upward (Plotly pixel convention)
+
+function buildAnnotation(point) {
   const x = point.x;
   const y = point.y;
 
@@ -316,70 +325,126 @@ function showPointAnnotation(point) {
   const modalityColor = modalityTextColor[modality] || "#222";
 
   const citation = point.customdata[0];
-  const freq = point.customdata[1];
-  const area = point.customdata[2];
-  const pte = point.customdata[3];
+  const freq     = point.customdata[1];
+  const area     = point.customdata[2];
+  const pte      = point.customdata[3];
 
-  const annotationText =
-    "<span style='color:" + modalityColor + "'><b>" + modality + "</b></span><br>" +
-    "<b>Depth:</b> " + x + " mm<br>" +
-    "<b>n_PTE:</b> " + y + "<br>" +
-    "<b>Frequency:</b> " + freq + " MHz<br>" +
-    "<b>RX Area:</b> " + area + " mm²<br>" +
-    "<b>PTE:</b> " + pte + " %<br><br>" +
-    citation;
+  // Information lines. The first line is the colored modality title.
+  // We use a small inline style block to mimic a professional callout:
+  //   - title in modality color, bold, slightly larger
+  //   - a thin separator
+  //   - data rows with bold labels in dark grey, values in near-black
+  const text =
+    "<span style=\"color:" + modalityColor + ";font-size:13px\"><b>" + modality + "</b></span>" +
+    "<br><span style=\"color:#888\">────────────</span>" +
+    "<br><b>Depth:</b> "     + x    + " mm" +
+    "<br><b>n_PTE:</b> "     + y +
+    "<br><b>Frequency:</b> " + freq + " MHz" +
+    "<br><b>RX Area:</b> "   + area + " mm²" +
+    "<br><b>PTE:</b> "       + pte  + " %" +
+    "<br><span style=\"color:#888\">────────────</span>" +
+    "<br><span style=\"color:#444;font-size:11px\">" + citation + "</span>";
 
-  const annotation = {
-    // Arrow head is attached to the selected symbol
+  return {
+    // Arrow tip sits on the symbol (data coordinates)
     x: x,
     y: y,
     xref: "x",
     yref: "y",
 
-    // Text box location is fixed in pixels relative to the symbol
-    // Positive ax moves the box to the right of the symbol.
-    // Negative ay moves the box above the symbol.
+    // Text box position is a fixed pixel offset from the symbol.
+    // This is the key property: pixel-based offset means the visual
+    // distance between symbol and box stays constant at any zoom level.
     axref: "pixel",
     ayref: "pixel",
-    ax: 65,
-    ay: -65,
+    ax: BOX_OFFSET_X,
+    ay: BOX_OFFSET_Y,
 
-    text: annotationText,
+    text: text,
     showarrow: true,
 
-    // Black connector line from the symbol to the information box
+    // Connector line: thin, dark, no arrowhead — looks like a leader line
     arrowhead: 0,
-    arrowwidth: 2,
-    arrowcolor: "black",
-    standoff: 5,
+    arrowwidth: 1.2,
+    arrowcolor: "#222",
+    standoff: 6,        // small gap so the line doesn't touch the symbol
+    startstandoff: 0,
 
-    bgcolor: "rgba(255,255,255,0.97)",
-    bordercolor: "black",
+    // Box appearance
+    bgcolor: "rgba(255,255,255,0.98)",
+    bordercolor: "#222",
     borderwidth: 1,
-    borderpad: 6,
+    borderpad: 8,
     align: "left",
 
     font: {
       family: "Helvetica Neue, Arial, sans-serif",
       size: 12,
-      color: "#222"
-    }
-  };
+      color: "#1a1a1a"
+    },
 
-  Plotly.relayout("plot", {
-    annotations: [annotation]
-  });
+    // Tag this annotation so we can identify ours vs. any others
+    name: "wpt-info-box"
+  };
 }
 
-// Desktop/laptop: show connected annotation on hover
-document.getElementById("plot").on("plotly_hover", function(data) {
-  showPointAnnotation(data.points[0]);
+// Update the persistent annotation. We use Plotly.relayout with ONLY
+// the annotations property — axis ranges and layout are untouched, so
+// the chart does not move or rescale when a box appears or changes.
+function showPointAnnotation(point) {
+  Plotly.relayout(PLOT_DIV, { annotations: [buildAnnotation(point)] });
+}
+
+function clearAnnotation() {
+  Plotly.relayout(PLOT_DIV, { annotations: [] });
+}
+
+// Desktop: hovering a symbol sets the persistent box.
+PLOT_DIV.on("plotly_hover", function(data) {
+  if (data && data.points && data.points.length > 0) {
+    showPointAnnotation(data.points[0]);
+  }
 });
 
-// Phone/tablet: show connected annotation on tap
-document.getElementById("plot").on("plotly_click", function(data) {
-  showPointAnnotation(data.points[0]);
+// IMPORTANT: do NOT clear on plotly_unhover. The user wants the box to
+// remain until another symbol is hovered or background is clicked.
+
+// Mobile/touch: tapping a symbol sets the persistent box.
+PLOT_DIV.on("plotly_click", function(data) {
+  if (data && data.points && data.points.length > 0) {
+    showPointAnnotation(data.points[0]);
+  }
 });
+
+// Clicking empty plot background clears the box. We detect this by
+// listening on the plot container and checking that the click did not
+// land on a symbol (plotly_click already handles symbol clicks above
+// and stops propagation in newer Plotly versions; we keep this as a
+// safety net using a small delay).
+let _suppressBgClear = false;
+PLOT_DIV.addEventListener("click", function(ev) {
+  // If the click hit a marker, plotly_click will fire too and set the
+  // suppress flag; we wait a tick before deciding to clear.
+  setTimeout(function() {
+    if (_suppressBgClear) {
+      _suppressBgClear = false;
+      return;
+    }
+    // Only clear if the click target is the plot background, not a
+    // marker, axis, legend, or modebar button.
+    const t = ev.target;
+    const isMarker = t && t.classList && (
+      t.classList.contains("point") ||
+      (t.parentElement && t.parentElement.classList && t.parentElement.classList.contains("points"))
+    );
+    const isLegend = t && t.closest && t.closest(".legend");
+    const isModeBar = t && t.closest && t.closest(".modebar");
+    if (!isMarker && !isLegend && !isModeBar) {
+      clearAnnotation();
+    }
+  }, 0);
+});
+PLOT_DIV.on("plotly_click", function() { _suppressBgClear = true; });
 
 
 
