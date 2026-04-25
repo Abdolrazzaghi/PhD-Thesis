@@ -31,8 +31,15 @@
   #plot-wrap {
     position: relative;
     width: 100%;
-    height: 70vh;
-    min-height: 480px;
+    /* Fixed aspect ratio: width 6 : height 4. Browsers compute the
+       height from the container width automatically, so the chart
+       maintains the same shape on phone, tablet, and desktop. */
+    aspect-ratio: 6 / 4;
+    /* Cap the width so the chart does not become too large on wide
+       monitors. 6 inches ≈ 576 px at 96 dpi; we allow a little extra
+       breathing room. */
+    max-width: 720px;
+    margin: 0 auto;
   }
   #plot {
     width: 100%;
@@ -107,6 +114,42 @@
     cursor: pointer;
     user-select: none;
   }
+  /* Modality filter row: checkboxes for each WPT category, with a
+     small color swatch next to each label so users immediately see
+     which marker style each option controls. */
+  .modality-filter {
+    margin: 10px 0 14px 0;
+    font-size: 0.9rem;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 16px;
+  }
+  .modality-filter strong {
+    margin-right: 4px;
+  }
+  .modality-filter label {
+    cursor: pointer;
+    user-select: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .modality-filter .swatch {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border: 1.5px solid #222;
+    box-sizing: border-box;
+  }
+  .modality-filter .swatch.radiative      { background: black;      border-color: black;      border-radius: 0;     }
+  .modality-filter .swatch.magnetoelectric{ background: transparent; border-color: red;        border-radius: 50%;   }
+  .modality-filter .swatch.inductive      { background: blue;       border-color: blue;       border-radius: 50%;   }
+  .modality-filter .swatch.ultrasound     {
+    background: darkorange; border-color: darkorange; width: 0; height: 0;
+    border-left: 7px solid transparent; border-right: 7px solid transparent;
+    border-bottom: 12px solid darkorange; border-top: 0;
+  }
 
   /* Make Plotly modebar buttons larger and easier to tap on phones */
 .modebar {
@@ -139,6 +182,22 @@
     <div class="subtitle">
       Each marker represents one published study. Hover over a marker to see the citation key, frequency, RX area, and PTE.
       Drag to pan. Use the + / − buttons to zoom on mobile.
+    </div>
+
+    <div class="modality-filter">
+      <strong>Show:</strong>
+      <label><input type="checkbox" data-modality="Radiative" checked>
+        <span class="swatch radiative"></span> Radiative
+      </label>
+      <label><input type="checkbox" data-modality="Magnetoelectric" checked>
+        <span class="swatch magnetoelectric"></span> Magnetoelectric
+      </label>
+      <label><input type="checkbox" data-modality="Inductive" checked>
+        <span class="swatch inductive"></span> Inductive
+      </label>
+      <label><input type="checkbox" data-modality="Ultrasound" checked>
+        <span class="swatch ultrasound"></span> Ultrasound
+      </label>
     </div>
 
         <div id="plot-wrap">
@@ -749,6 +808,83 @@ window.addEventListener("resize", function() {
   PLOT_DIV.addEventListener("touchend",    endGesture, { passive: true });
   PLOT_DIV.addEventListener("touchcancel", endGesture, { passive: true });
 })();
+
+// =====================================================================
+//  MODALITY FILTER CHECKBOXES
+//
+//  Each checkbox controls the visibility of one Plotly trace. The
+//  trace order matches the modalities array used when building traces:
+//    0: Radiative, 1: Magnetoelectric, 2: Inductive, 3: Ultrasound.
+//  We use Plotly.restyle with `visible` set to true or "legendonly".
+//  "legendonly" hides the points but keeps the legend entry visible
+//  and clickable, so the user can re-show via either control.
+// =====================================================================
+
+const traceIndexByModality = {
+  "Radiative":       0,
+  "Magnetoelectric": 1,
+  "Inductive":       2,
+  "Ultrasound":      3
+};
+
+function applyModalityVisibility(modality, visible) {
+  const idx = traceIndexByModality[modality];
+  if (idx === undefined) return;
+  Plotly.restyle(PLOT_DIV, { visible: visible ? true : "legendonly" }, [idx]);
+  // If the currently pinned point belongs to a hidden modality, clear
+  // the info box so it does not float over an empty area.
+  if (!visible && pinnedPoint && pinnedPoint.fullData &&
+      pinnedPoint.fullData.name === modality) {
+    unpinPoint();
+  }
+}
+
+document.querySelectorAll('.modality-filter input[type="checkbox"]').forEach(function(cb) {
+  cb.addEventListener("change", function() {
+    applyModalityVisibility(cb.dataset.modality, cb.checked);
+  });
+});
+
+// Keep the checkboxes in sync with the legend: clicking a legend entry
+// in Plotly toggles trace visibility, and we mirror that state back
+// into the checkboxes so the two controls never disagree.
+PLOT_DIV.on("plotly_legendclick", function(ev) {
+  const traceIdx = ev.curveNumber;
+  const modalityName = PLOT_DIV.data[traceIdx].name;
+  // After the legend click, Plotly will flip visibility. The current
+  // value before the flip is in ev.data[traceIdx].visible. We compute
+  // what it WILL be and update the checkbox to match.
+  const currentVisible = PLOT_DIV.data[traceIdx].visible;
+  const nextVisible = (currentVisible === false || currentVisible === "legendonly");
+  // Defer so this runs after Plotly applies the change.
+  setTimeout(function() {
+    const cb = document.querySelector(
+      '.modality-filter input[data-modality="' + modalityName + '"]'
+    );
+    if (cb) cb.checked = nextVisible;
+    if (!nextVisible && pinnedPoint && pinnedPoint.fullData &&
+        pinnedPoint.fullData.name === modalityName) {
+      unpinPoint();
+    }
+  }, 0);
+  // Returning true (the default) lets Plotly handle the click normally.
+});
+
+// =====================================================================
+//  AXIS SCALE RADIO BUTTONS
+//  Wire up the linear/log toggles for X and Y axes that exist in the
+//  HTML. Selecting an option calls Plotly.relayout to switch axis type.
+// =====================================================================
+document.querySelectorAll('input[name="xscale"]').forEach(function(r) {
+  r.addEventListener("change", function() {
+    if (r.checked) Plotly.relayout(PLOT_DIV, { "xaxis.type": r.value });
+  });
+});
+document.querySelectorAll('input[name="yscale"]').forEach(function(r) {
+  r.addEventListener("change", function() {
+    if (r.checked) Plotly.relayout(PLOT_DIV, { "yaxis.type": r.value });
+  });
+});
 </script>
 </body>
 </html>
