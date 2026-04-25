@@ -58,6 +58,7 @@
     <h1>Wireless Power Transfer Modalities — PTE vs. Implant Depth</h1>
     <div class="subtitle">
       Each marker represents one published study. Hover over a marker to see the citation key, frequency, RX area, and PTE.
+      Drag to pan. Use the + / − buttons to zoom on mobile.
     </div>
 
     <div class="axis-toggle">
@@ -240,9 +241,7 @@ const config = {
 };
 
 Plotly.newPlot("plot", traces, layout, config);
-<div class="subtitle">
-  Each marker represents one published study. Drag to pan. Use the + / − buttons to zoom on mobile.
-</div>
+
 document.querySelectorAll('input[name="xscale"]').forEach(el => {
   el.addEventListener("change", e => Plotly.relayout("plot", {"xaxis.type": e.target.value}));
 });
