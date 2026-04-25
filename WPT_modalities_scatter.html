@@ -176,8 +176,10 @@ const traces = modalities.map(mod => {
 
 const layout = {
   margin: {l: 70, r: 30, t: 30, b: 60},
-    // Make the default mouse/touch drag behavior pan instead of box zoom
+
+  // One-finger drag pans the plot instead of drawing a zoom box
   dragmode: "pan",
+
   xaxis: {
     title: {text: "Implant Depth [mm]"},
     type: "linear",
@@ -188,6 +190,7 @@ const layout = {
     mirror: true,
     ticks: "outside"
   },
+
   yaxis: {
     title: {text: "Normalized PTE (PTE/Size) [%/mm2]"},
     type: "log",
@@ -198,16 +201,19 @@ const layout = {
     mirror: true,
     ticks: "outside"
   },
+
   legend: {
     x: 1, y: 1, xanchor: "right", yanchor: "top",
     bgcolor: "rgba(255,255,255,0.85)",
     bordercolor: "#ccc", borderwidth: 1
   },
+
   hoverlabel: {
     bgcolor: "white", bordercolor: "#888",
     font: {family: "Helvetica Neue, Arial, sans-serif", size: 12, color: "#222"},
     align: "left"
   },
+
   paper_bgcolor: "white",
   plot_bgcolor: "white"
 };
