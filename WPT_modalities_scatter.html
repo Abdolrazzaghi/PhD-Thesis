@@ -220,7 +220,13 @@ customdata: rows.map(r => [wrapHoverText(r.label, 45), r.freq, r.area, r.pte]),
 });
 
 const layout = {
-  margin: {l: 70, r: 30, t: 30, b: 60},
+  margin: {
+  l: 70,
+  r: 30,
+  t: 30,
+  b: 60,
+  autoexpand: false
+},
 
   // Default one-finger drag behavior
   dragmode: "pan",
@@ -291,7 +297,7 @@ Plotly.newPlot("plot", traces, layout, config);
 // =====================================================================
 
 // =====================================================================
-//  Dynamic hover/tap annotation with black connector line
+//  Fixed-offset hover/tap annotation with black connector line
 // =====================================================================
 
 // Color used for the modality/category text inside the annotation box
@@ -301,33 +307,6 @@ const modalityTextColor = {
   "Inductive": "blue",
   "Ultrasound": "darkorange"
 };
-
-// Estimate whether the marker is near the left/right/top/bottom side
-// and place the annotation box nearby but inside the visible plot region.
-function getDynamicAnnotationOffset(point) {
-  const plotDiv = document.getElementById("plot");
-  const fullLayout = plotDiv._fullLayout;
-
-  // Convert data coordinates to pixel coordinates inside the plotting area
-  const px = fullLayout.xaxis.l2p(point.x);
-  const py = fullLayout.yaxis.l2p(point.y);
-
-  const plotWidth = fullLayout.xaxis._length;
-  const plotHeight = fullLayout.yaxis._length;
-
-  // Distance between symbol and annotation box, in pixels
-  const offset = 75;
-
-  // If point is on the left half, put box to the right.
-  // If point is on the right half, put box to the left.
-  let ax = px < plotWidth * 0.55 ? -offset : offset;
-
-  // If point is on the upper half, put box below.
-  // If point is on the lower half, put box above.
-  let ay = py < plotHeight * 0.45 ? offset : -offset;
-
-  return { ax, ay };
-}
 
 function showPointAnnotation(point) {
   const x = point.x;
@@ -341,8 +320,6 @@ function showPointAnnotation(point) {
   const area = point.customdata[2];
   const pte = point.customdata[3];
 
-  const offset = getDynamicAnnotationOffset(point);
-
   const annotationText =
     "<span style='color:" + modalityColor + "'><b>" + modality + "</b></span><br>" +
     "<b>Depth:</b> " + x + " mm<br>" +
@@ -353,27 +330,28 @@ function showPointAnnotation(point) {
     citation;
 
   const annotation = {
+    // Arrow head is attached to the selected symbol
     x: x,
     y: y,
     xref: "x",
     yref: "y",
 
-    // Use pixel offset relative to the selected symbol
+    // Text box location is fixed in pixels relative to the symbol
+    // Positive ax moves the box to the right of the symbol.
+    // Negative ay moves the box above the symbol.
     axref: "pixel",
     ayref: "pixel",
-    ax: offset.ax,
-    ay: offset.ay,
+    ax: 95,
+    ay: -95,
 
     text: annotationText,
     showarrow: true,
 
-    // This is the black connector line from box to symbol
+    // Black connector line from the symbol to the information box
     arrowhead: 0,
-    arrowwidth: 10,
+    arrowwidth: 2,
     arrowcolor: "black",
-
-    // Small gap so the line does not visually cover the marker center
-    standoff: 4,
+    standoff: 5,
 
     bgcolor: "rgba(255,255,255,0.97)",
     bordercolor: "black",
