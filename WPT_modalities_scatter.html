@@ -4,7 +4,35 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>WPT Modalities — Interactive Scatter</title>
-<script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+<!--
+  Load Plotly. Two CDNs are tried in sequence so the page still works
+  even if one of them is blocked by a network or a browser extension.
+  If the primary fails, the onerror handler swaps in the backup script.
+-->
+<script>
+  function loadPlotlyFallback() {
+    var s = document.createElement("script");
+    s.src = "https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js";
+    s.charset = "utf-8";
+    s.onerror = function() {
+      // Both CDNs failed: surface a clear message so the user knows
+      // why nothing rendered, instead of a silent blank page.
+      window.__plotlyLoadFailed = true;
+      var box = document.getElementById("plot");
+      if (box) {
+        box.innerHTML =
+          '<div style="padding:24px;font-family:Arial,sans-serif;color:#a00;font-size:14px">' +
+          '<b>Plotly library failed to load.</b><br><br>' +
+          'This page needs an internet connection on first open to fetch Plotly. ' +
+          'Please check your network or try a different browser/device.' +
+          '</div>';
+      }
+    };
+    document.head.appendChild(s);
+  }
+</script>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"
+        onerror="loadPlotlyFallback()"></script>
 <style>
   html, body {
     margin: 0;
@@ -99,20 +127,34 @@
     color: #555;
     font-size: 11px;
   }
-  .notes {
-    margin-top: 16px;
-    font-size: 0.85rem;
-    color: #555;
-    line-height: 1.5;
-  }
-  .axis-toggle {
-    margin: 10px 0 14px 0;
-    font-size: 0.9rem;
-  }
-  .axis-toggle label {
-    margin-right: 14px;
-    cursor: pointer;
-    user-select: none;
+  /* Region labels overlay: small rounded rectangles with vertical
+     text, anchored to data coordinates inside the chart at y = 1e-4
+     (100 micro-units). Pointer-events disabled so they never block
+     hover or pan/zoom on the chart underneath. */
+  .region-label {
+    position: absolute;
+    pointer-events: none;
+    z-index: 4;
+    background: rgba(255, 255, 255, 0.92);
+    border: 1px solid #7a5a40;
+    border-radius: 8px;
+    padding: 8px 4px;
+    font-family: "Helvetica Neue", Arial, sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    color: #000000;
+    text-align: center;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    /* Vertical text reading bottom-to-top. The combination of
+       writing-mode and the rotate(180deg) applied via JS produces
+       the correct upright vertical orientation. */
+    writing-mode: vertical-rl;
+    white-space: nowrap;
+    line-height: 1.2;
+    letter-spacing: 0.3px;
+    /* Hidden until JS positions it. */
+    display: none;
+    transform-origin: center center;
   }
   /* Modality filter row: checkboxes for each WPT category, with a
      small color swatch next to each label so users immediately see
@@ -142,13 +184,13 @@
     border: 1.5px solid #222;
     box-sizing: border-box;
   }
-  .modality-filter .swatch.radiative      { background: black;      border-color: black;      border-radius: 0;     }
-  .modality-filter .swatch.magnetoelectric{ background: transparent; border-color: red;        border-radius: 50%;   }
-  .modality-filter .swatch.inductive      { background: blue;       border-color: blue;       border-radius: 50%;   }
+  .modality-filter .swatch.radiative      { background: #000000;    border-color: #000000;    border-radius: 0;     }
+  .modality-filter .swatch.magnetoelectric{ background: transparent; border-color: #D62728;    border-radius: 50%;   }
+  .modality-filter .swatch.inductive      { background: #0072BD;    border-color: #0072BD;    border-radius: 50%;   }
   .modality-filter .swatch.ultrasound     {
-    background: darkorange; border-color: darkorange; width: 0; height: 0;
+    background: transparent; width: 0; height: 0;
     border-left: 7px solid transparent; border-right: 7px solid transparent;
-    border-bottom: 12px solid darkorange; border-top: 0;
+    border-bottom: 12px solid #2CA02C; border-top: 0;
   }
 
   /* Make Plotly modebar buttons larger and easier to tap on phones */
@@ -204,28 +246,47 @@
       <div id="plot"></div>
       <svg id="leader-svg"></svg>
       <div id="info-box"></div>
-    </div>
-    
-    <div class="axis-toggle">
-      <strong>X axis:</strong>
-      <label><input type="radio" name="xscale" value="linear" checked> Linear</label>
-      <label><input type="radio" name="xscale" value="log"> Log</label>
-      &nbsp;&nbsp;
-      <strong>Y axis:</strong>
-      <label><input type="radio" name="yscale" value="linear"> Linear</label>
-      <label><input type="radio" name="yscale" value="log" checked> Log</label>
-    </div>
-
-
-
-    <div class="notes">
-      <strong>Marker legend:</strong> black filled square — Radiative; red open ring — Magnetoelectric;
-      blue filled circle — Inductive; orange triangle — Ultrasound.
-      Click a legend entry to hide or show the corresponding modality.
+      <!-- Brain region labels: positioned by JavaScript at data
+           coordinate y = 1e-4 and the horizontal midpoint of each
+           region's depth range. Updated on every plotly_relayout
+           so they pan and zoom with the chart. -->
+      <div class="region-label" data-region="scalp"  data-x="2.5"  data-y="0.0001">SCALP + SKULL</div>
+      <div class="region-label" data-region="cortex" data-x="10"   data-y="0.0001">CORTEX</div>
+      <div class="region-label" data-region="white"  data-x="22.5" data-y="0.0001">WHITE MATTER</div>
+      <div class="region-label" data-region="deep"   data-x="90"   data-y="0.0001">DEEP BRAIN</div>
     </div>
   </div>
 
 <script>
+// =====================================================================
+//  WAIT FOR PLOTLY TO BE READY
+//
+//  Modern browsers normally guarantee that scripts in <head> finish
+//  loading before scripts in <body> run, but on slow connections or
+//  when a fallback CDN is used, Plotly may still be loading when this
+//  block first executes. The poll below waits up to 10 seconds for
+//  the global `Plotly` object to appear, then runs the chart code.
+//  If Plotly never loads (both CDNs blocked), the error message in
+//  the head's onerror handler is already shown to the user.
+// =====================================================================
+(function waitForPlotly() {
+  var elapsed = 0;
+  var intervalMs = 50;
+  var timeoutMs = 10000;
+  var timer = setInterval(function() {
+    if (typeof Plotly !== "undefined") {
+      clearInterval(timer);
+      runChart();
+    } else if (window.__plotlyLoadFailed || elapsed > timeoutMs) {
+      clearInterval(timer);
+      // The onerror handler in <head> already displayed an error
+      // message in the plot container, so we just stop here.
+    }
+    elapsed += intervalMs;
+  }, intervalMs);
+})();
+
+function runChart() {
 // =====================================================================
 //  DATA: To add a new paper, copy any line below and edit the values.
 //  Make sure the line ends with a comma (except the last one is fine
@@ -283,10 +344,15 @@ const records = [
 //  STYLE: Marker appearance per modality. Edit colors or sizes here.
 // =====================================================================
 const styleByModality = {
-  "Radiative":       { symbol: "square",      size: 11, fill: "black",            line: "black",      lineWidth: 1   },
-  "Magnetoelectric": { symbol: "circle", size: 13, fill: "rgba(0,0,0,0)",    line: "red",        lineWidth: 2.5 },
-  "Inductive":       { symbol: "circle",      size: 11, fill: "blue",             line: "blue",       lineWidth: 1   },
-  "Ultrasound":      { symbol: "triangle-up", size: 12, fill: "darkorange",       line: "darkorange", lineWidth: 1   }
+  // Colors from the user's standard palette:
+  //   Radiative      -> black (#000000)            filled square
+  //   Magnetoelectric -> red   (#D62728)           open ring
+  //   Inductive      -> blue  (#0072BD)            filled circle
+  //   Ultrasound     -> green (#2CA02C)            filled triangle
+  "Radiative":       { symbol: "square",      size: 11, fill: "#000000",          line: "#000000",    lineWidth: 1   },
+  "Magnetoelectric": { symbol: "circle",      size: 13, fill: "rgba(0,0,0,0)",    line: "#D62728",    lineWidth: 2.5 },
+  "Inductive":       { symbol: "circle",      size: 11, fill: "#0072BD",          line: "#0072BD",    lineWidth: 1   },
+  "Ultrasound":      { symbol: "triangle-up", size: 12, fill: "#2CA02C",          line: "#2CA02C",    lineWidth: 1   }
 };
 
 // =====================================================================
@@ -350,9 +416,18 @@ const layout = {
   // Default one-finger drag behavior
   dragmode: "pan",
 
+  // Hide Plotly's built-in legend; the modality checkboxes above the
+  // chart and the brain-region cards below it serve the same purpose
+  // in a cleaner way for a presentation.
+  showlegend: false,
+
   xaxis: {
     title: {text: "Implant Depth [mm]"},
     type: "linear",
+    // Default visible range when the page first loads. The user can
+    // still pan or zoom out beyond this, up to wherever the brain
+    // regions extend (Deep Brain ends at 150 mm).
+    range: [0, 70],
     gridcolor: "#eee",
     zeroline: false,
     showline: true,
@@ -372,11 +447,76 @@ const layout = {
     ticks: "outside"
   },
 
-  legend: {
-    x: 1, y: 1, xanchor: "right", yanchor: "top",
-    bgcolor: "rgba(255,255,255,0.85)",
-    bordercolor: "#ccc", borderwidth: 1
-  },
+  // ===================================================================
+  //  BRAIN REGION RECTANGLES
+  //  Each rectangle covers a depth range on the x-axis and the full
+  //  height of the y-axis (yref "paper" means 0 = bottom, 1 = top of
+  //  plot area regardless of the y-axis scale or zoom). Setting
+  //  layer "below" puts them behind the data points and the gridlines
+  //  but in front of the plot background.
+  //
+  //  Colors are a warm pinkish-brown gradient that mimics anatomical
+  //  cross-section illustrations: paler for superficial tissue,
+  //  deeper hue for deep brain.
+  //
+  //  Deep Brain extends to a very large x value so it covers anywhere
+  //  the user can pan or zoom out to.
+  // ===================================================================
+  shapes: [
+    // Scalp + Skull: 0 to 5 mm
+    {
+      type: "rect", layer: "below",
+      xref: "x", yref: "paper",
+      x0: 0, x1: 5, y0: 0, y1: 1,
+      fillcolor: "#f5e6dc", line: { width: 0 }
+    },
+    // Cortex: 5 to 15 mm
+    {
+      type: "rect", layer: "below",
+      xref: "x", yref: "paper",
+      x0: 5, x1: 15, y0: 0, y1: 1,
+      fillcolor: "#ecd0bf", line: { width: 0 }
+    },
+    // White Matter: 15 to 30 mm
+    {
+      type: "rect", layer: "below",
+      xref: "x", yref: "paper",
+      x0: 15, x1: 30, y0: 0, y1: 1,
+      fillcolor: "#dab59a", line: { width: 0 }
+    },
+    // Deep Brain: 30 mm to 150 mm. Beyond 150 mm there is no region
+    // color, so users panning past that limit see white space, which
+    // signals that we are out of the meaningful anatomical range.
+    {
+      type: "rect", layer: "below",
+      xref: "x", yref: "paper",
+      x0: 30, x1: 150, y0: 0, y1: 1,
+      fillcolor: "#c89878", line: { width: 0 }
+    },
+    // Region dividers: dashed vertical lines at 5, 15, 30 mm. Drawn
+    // on the "above" layer so they sit above the gridlines (otherwise
+    // a gridline at 30 mm would obscure the divider). Width 2 is
+    // roughly twice the chart frame's line width, and "dash" gives
+    // longer, more readable strokes than the original "dot".
+    {
+      type: "line", layer: "above",
+      xref: "x", yref: "paper",
+      x0: 5, x1: 5, y0: 0, y1: 1,
+      line: { color: "#7a5a40", width: 2, dash: "dash" }
+    },
+    {
+      type: "line", layer: "above",
+      xref: "x", yref: "paper",
+      x0: 15, x1: 15, y0: 0, y1: 1,
+      line: { color: "#7a5a40", width: 2, dash: "dash" }
+    },
+    {
+      type: "line", layer: "above",
+      xref: "x", yref: "paper",
+      x0: 30, x1: 30, y0: 0, y1: 1,
+      line: { color: "#7a5a40", width: 2, dash: "dash" }
+    }
+  ],
 
   hoverlabel: {
     bgcolor: "white",
@@ -437,9 +577,9 @@ const SVG_NS = "http://www.w3.org/2000/svg";
 // Modality title color used inside the info box
 const modalityTextColor = {
   "Radiative":       "#000000",
-  "Magnetoelectric": "#d62728",
-  "Inductive":       "#1f4ed8",
-  "Ultrasound":      "#e07b00"
+  "Magnetoelectric": "#D62728",
+  "Inductive":       "#0072BD",
+  "Ultrasound":      "#2CA02C"
 };
 
 // Fixed pixel offset from the symbol to the NEAR corner of the box.
@@ -550,6 +690,38 @@ function drawLeaderLine(x1, y1, x2, y2) {
   SVG.appendChild(line);
 }
 
+// =====================================================================
+//  REGION LABEL POSITIONING
+//
+//  Each label is anchored to a data coordinate (region's horizontal
+//  midpoint, y = 1e-4) and centered on that point. We translate by
+//  (-50%, -50%) in CSS via the transform shorthand to center it.
+//  Note that transform also handles the rotation for vertical text,
+//  so we combine both in a single transform string.
+//
+//  Called whenever the chart layout changes (zoom, pan, axis scale
+//  toggle, resize) so the labels track their data anchor.
+// =====================================================================
+const REGION_LABELS = document.querySelectorAll(".region-label");
+
+function repositionRegionLabels() {
+  REGION_LABELS.forEach(function(el) {
+    const xData = parseFloat(el.dataset.x);
+    const yData = parseFloat(el.dataset.y);
+    const px = dataToPixels(xData, yData);
+    if (!px) {
+      el.style.display = "none";
+      return;
+    }
+    el.style.display = "block";
+    el.style.left = px.x + "px";
+    el.style.top  = px.y + "px";
+    // Center on the anchor point AND apply the 180° rotation for
+    // vertical text (writing-mode rl is bottom-to-top after flipping).
+    el.style.transform = "translate(-50%, -50%) rotate(180deg)";
+  });
+}
+
 // Pin a Plotly point: store reference info needed to reposition later.
 function pinPoint(point) {
   pinnedPoint = {
@@ -654,11 +826,23 @@ WRAP.addEventListener("click", function(ev) {
 // event with the new ranges already applied to _fullLayout.
 PLOT_DIV.on("plotly_relayout", function() {
   redrawOverlay();
+  repositionRegionLabels();
+});
+
+// plotly_afterplot fires once after the initial render (and also after
+// later redraws). We use it to position the region labels on first
+// load, since they need _fullLayout to exist before dataToPixels can
+// compute pixel coordinates.
+PLOT_DIV.on("plotly_afterplot", function() {
+  repositionRegionLabels();
 });
 
 // Reposition on window resize too.
 window.addEventListener("resize", function() {
-  setTimeout(redrawOverlay, 50);
+  setTimeout(function() {
+    redrawOverlay();
+    repositionRegionLabels();
+  }, 50);
 });
 
 // =====================================================================
@@ -845,46 +1029,11 @@ document.querySelectorAll('.modality-filter input[type="checkbox"]').forEach(fun
   });
 });
 
-// Keep the checkboxes in sync with the legend: clicking a legend entry
-// in Plotly toggles trace visibility, and we mirror that state back
-// into the checkboxes so the two controls never disagree.
-PLOT_DIV.on("plotly_legendclick", function(ev) {
-  const traceIdx = ev.curveNumber;
-  const modalityName = PLOT_DIV.data[traceIdx].name;
-  // After the legend click, Plotly will flip visibility. The current
-  // value before the flip is in ev.data[traceIdx].visible. We compute
-  // what it WILL be and update the checkbox to match.
-  const currentVisible = PLOT_DIV.data[traceIdx].visible;
-  const nextVisible = (currentVisible === false || currentVisible === "legendonly");
-  // Defer so this runs after Plotly applies the change.
-  setTimeout(function() {
-    const cb = document.querySelector(
-      '.modality-filter input[data-modality="' + modalityName + '"]'
-    );
-    if (cb) cb.checked = nextVisible;
-    if (!nextVisible && pinnedPoint && pinnedPoint.fullData &&
-        pinnedPoint.fullData.name === modalityName) {
-      unpinPoint();
-    }
-  }, 0);
-  // Returning true (the default) lets Plotly handle the click normally.
-});
+// (The in-chart Plotly legend has been hidden via showlegend:false in
+// the layout, so no plotly_legendclick handler is needed. Modality
+// visibility is controlled solely by the checkboxes above the chart.)
 
-// =====================================================================
-//  AXIS SCALE RADIO BUTTONS
-//  Wire up the linear/log toggles for X and Y axes that exist in the
-//  HTML. Selecting an option calls Plotly.relayout to switch axis type.
-// =====================================================================
-document.querySelectorAll('input[name="xscale"]').forEach(function(r) {
-  r.addEventListener("change", function() {
-    if (r.checked) Plotly.relayout(PLOT_DIV, { "xaxis.type": r.value });
-  });
-});
-document.querySelectorAll('input[name="yscale"]').forEach(function(r) {
-  r.addEventListener("change", function() {
-    if (r.checked) Plotly.relayout(PLOT_DIV, { "yaxis.type": r.value });
-  });
-});
+}  // end of runChart()
 </script>
 </body>
 </html>
