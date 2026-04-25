@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WPT Modalities — Interactive Scatter</title>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    font-family: "Helvetica Neue", Arial, sans-serif;
+    background: #fafafa;
+    color: #222;
+  }
+  .container {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 20px;
+  }
+  h1 {
+    font-size: 1.4rem;
+    font-weight: 500;
+    margin: 0 0 6px 0;
+  }
+  .subtitle {
+    font-size: 0.95rem;
+    color: #555;
+    margin-bottom: 18px;
+  }
+  #plot {
+    width: 100%;
+    height: 70vh;
+    min-height: 480px;
+    background: white;
+    border: 1px solid #e5e5e5;
+    border-radius: 6px;
+  }
+  .notes {
+    margin-top: 16px;
+    font-size: 0.85rem;
+    color: #555;
+    line-height: 1.5;
+  }
+  .axis-toggle {
+    margin: 10px 0 14px 0;
+    font-size: 0.9rem;
+  }
+  .axis-toggle label {
+    margin-right: 14px;
+    cursor: pointer;
+    user-select: none;
+  }
+</style>
+</head>
+<body>
+  <div class="container">
+    <h1>Wireless Power Transfer Modalities — PTE vs. Implant Depth</h1>
+    <div class="subtitle">
+      Each marker represents one published study. Hover over a marker to see the citation key, frequency, RX area, and PTE.
+    </div>
+
+    <div class="axis-toggle">
+      <strong>X axis:</strong>
+      <label><input type="radio" name="xscale" value="linear" checked> Linear</label>
+      <label><input type="radio" name="xscale" value="log"> Log</label>
+      &nbsp;&nbsp;
+      <strong>Y axis:</strong>
+      <label><input type="radio" name="yscale" value="linear"> Linear</label>
+      <label><input type="radio" name="yscale" value="log" checked> Log</label>
+    </div>
+
+    <div id="plot"></div>
+
+    <div class="notes">
+      <strong>Marker legend:</strong> black filled square — Radiative; red open ring — Magnetoelectric;
+      blue filled circle — Inductive; orange triangle — Ultrasound.
+      Click a legend entry to hide or show the corresponding modality.
+    </div>
+  </div>
+
+<script>
+// =====================================================================
+//  DATA: To add a new paper, copy any line below and edit the values.
+//  Make sure the line ends with a comma (except the last one is fine
+//  with or without). Modality must be one of:
+//    "Radiative", "Magnetoelectric", "Inductive", "Ultrasound"
+// =====================================================================
+const records = [
+  { modality: "Radiative", label: "Montgomery2015-ig", depth: 30.0, n_pte: 0.06125, freq: 1500.0, area: 8.0, pte: 0.49 },
+  { modality: "Radiative", label: "Leung2018-al", depth: 8.0, n_pte: 0.076, freq: 915.0, area: 0.25, pte: 0.019 },
+  { modality: "Radiative", label: "Lee2021-cf", depth: 5.0, n_pte: 0.781065088757397, freq: 907.22, area: 0.4225, pte: 0.33 },
+  { modality: "Radiative", label: "Ho2014-aw", depth: 50.0, n_pte: 0.00571428571428571, freq: 1600.0, area: 7.0, pte: 0.04 },
+  { modality: "Radiative", label: "Agrawal2017-tb", depth: 42.0, n_pte: 0.0124444444444444, freq: 1600.0, area: 4.5, pte: 0.056 },
+  { modality: "Radiative", label: "Abdolrazzaghi2022-id", depth: 50.0, n_pte: 0.2275, freq: 2100.0, area: 4.0, pte: 0.91 },
+  { modality: "Radiative", label: "Abdolrazzaghi2025-ek", depth: 25.0, n_pte: 0.00135185185185185, freq: 915.0, area: 54.0, pte: 0.073 },
+  { modality: "Magnetoelectric", label: "Zou2025-ns", depth: 20.0, n_pte: 0.059, freq: 0.35, area: 10.0, pte: 0.59 },
+  { modality: "Magnetoelectric", label: "Wang2025-cx", depth: 20.0, n_pte: 0.00860091743119266, freq: 0.32, area: 34.88, pte: 0.3 },
+  { modality: "Magnetoelectric", label: "Sanchez-Chiva2021-oy", depth: 20.0, n_pte: 0.0208333333333333, freq: 0.245, area: 12.0, pte: 0.25 },
+  { modality: "Magnetoelectric", label: "Yu2022-ky", depth: 10.0, n_pte: 0.00125382262996942, freq: 0.33, area: 32.7, pte: 0.041 },
+  { modality: "Magnetoelectric", label: "Wang2024-zi", depth: 20.0, n_pte: 0.158, freq: 0.34, area: 10.0, pte: 1.58 },
+  { modality: "Magnetoelectric", label: "Yu2020-kx", depth: 20.0, n_pte: 0.025, freq: 0.25, area: 8.0, pte: 0.2 },
+  { modality: "Magnetoelectric", label: "Yu2020-lr", depth: 15.0, n_pte: 0.012, freq: 0.25, area: 4.5, pte: 0.054 },
+  { modality: "Magnetoelectric", label: "Yu2022-wa", depth: 10.0, n_pte: 0.00486111111111111, freq: 0.34, area: 8.64, pte: 0.042 },
+  { modality: "Magnetoelectric", label: "Yu2024-wr", depth: 20.0, n_pte: 0.025, freq: 0.34, area: 8.0, pte: 0.2 },
+  { modality: "Magnetoelectric", label: "Alrashdan2024-qu", depth: 20.0, n_pte: 0.0625, freq: 0.33, area: 8.0, pte: 0.5 },
+  { modality: "Magnetoelectric", label: "Wang2024-im", depth: 20.0, n_pte: 0.055, freq: 0.34, area: 10.0, pte: 0.55 },
+  { modality: "Magnetoelectric", label: "Alrashdan2021-nf", depth: 40.0, n_pte: 0.0476190476190476, freq: 0.24, area: 21.0, pte: 1.0 },
+  { modality: "Magnetoelectric", label: "Chen2022-to", depth: 15.0, n_pte: 0.08, freq: 0.4, area: 4.5, pte: 0.36 },
+  { modality: "Magnetoelectric", label: "Hosur2021-em", depth: 20.0, n_pte: 0.0166666666666667, freq: 0.25, area: 30.0, pte: 0.5 },
+  { modality: "Magnetoelectric", label: "Kim2023-hy", depth: 15.0, n_pte: 0.15, freq: 0.3, area: 8.0, pte: 1.2 },
+  { modality: "Magnetoelectric", label: "Mukherjee2024-cn", depth: 15.0, n_pte: 0.133333333333333, freq: 0.315, area: 6.0, pte: 0.8 },
+  { modality: "Magnetoelectric", label: "Singer2020-mf", depth: 20.0, n_pte: 0.06875, freq: 0.17, area: 8.0, pte: 0.55 },
+  { modality: "Magnetoelectric", label: "NOT FOUND", depth: 10.0, n_pte: 0.00977777777777778, freq: 0.22, area: 22.5, pte: 0.22 },
+  { modality: "Inductive", label: "Lee2021-cf", depth: 8.0, n_pte: 0.781065088757397, freq: 907.22, area: 0.4225, pte: 0.33 },
+  { modality: "Inductive", label: "Ahn2016-xz", depth: 12.0, n_pte: 0.56, freq: 200.0, area: 1.0, pte: 0.56 },
+  { modality: "Inductive", label: "Ibrahim2018-ff", depth: 52.0, n_pte: 0.00581818181818182, freq: 20.0, area: 1.1, pte: 0.0064 },
+  { modality: "Inductive", label: "Ibrahim2018-ff", depth: 52.0, n_pte: 0.0216666666666667, freq: 11.0, area: 6.0, pte: 0.13 },
+  { modality: "Inductive", label: "Jia2019-oh", depth: 7.0, n_pte: 0.0336, freq: 60.0, area: 6.25, pte: 0.21 },
+  { modality: "Inductive", label: "Muller2015-vv", depth: 10.0, n_pte: 0.0512356841470765, freq: 300.0, area: 33.18, pte: 1.7 },
+  { modality: "Inductive", label: "Burton2020-km", depth: 60.0, n_pte: 0.00802721088435374, freq: 13.56, area: 73.5, pte: 0.59 },
+  { modality: "Inductive", label: "Abdolrazzaghi2026-yi", depth: 30.0, n_pte: 0.000392973631469328, freq: 13.56, area: 254.47, pte: 0.1 },
+  { modality: "Inductive", label: "Ren2024-et", depth: 55.0, n_pte: 0.000323886639676113, freq: 1400.0, area: 370.5, pte: 0.12 },
+  { modality: "Inductive", label: "Shaw2019-rz", depth: 50.0, n_pte: 0.00777777777777778, freq: 2450.0, area: 144.0, pte: 1.12 },
+  { modality: "Inductive", label: "Li2018-kt", depth: 60.0, n_pte: 0.00133333333333333, freq: 430.0, area: 120.0, pte: 0.16 },
+  { modality: "Ultrasound", label: "Shi2021-mq", depth: 20.0, n_pte: 6.2280701754386, freq: 8.3, area: 0.114, pte: 0.71 },
+  { modality: "Ultrasound", label: "Piech2020-kr", depth: 18.0, n_pte: 1.24444444444444, freq: 1.85, area: 0.5625, pte: 0.7 },
+  { modality: "Ultrasound", label: "Ibrahim2018-ff", depth: 50.0, n_pte: 0.636363636363636, freq: 1.6, area: 1.1, pte: 0.7 },
+  { modality: "Ultrasound", label: "Chang2018-qh", depth: 60.0, n_pte: 6.32508833922262, freq: 1.85, area: 0.283, pte: 1.79 },
+  { modality: "Ultrasound", label: "Johnson2018-ea", depth: 21.5, n_pte: 1.45777777777778, freq: 1.85, area: 0.5625, pte: 0.82 },
+  { modality: "Ultrasound", label: "Meng2017-ij", depth: 30.0, n_pte: 0.584070796460177, freq: 1.1, area: 1.13, pte: 0.66 }
+];
+
+// =====================================================================
+//  STYLE: Marker appearance per modality. Edit colors or sizes here.
+// =====================================================================
+const styleByModality = {
+  "Radiative":       { symbol: "square",      size: 11, fill: "black",            line: "black",      lineWidth: 1   },
+  "Magnetoelectric": { symbol: "circle", size: 13, fill: "rgba(0,0,0,0)",    line: "red",        lineWidth: 2.5 },
+  "Inductive":       { symbol: "circle",      size: 11, fill: "blue",             line: "blue",       lineWidth: 1   },
+  "Ultrasound":      { symbol: "triangle-up", size: 12, fill: "darkorange",       line: "darkorange", lineWidth: 1   }
+};
+
+// =====================================================================
+//  Below this line you usually don't need to edit anything.
+// =====================================================================
+
+// Group records by modality and build one Plotly trace per group.
+const modalities = ["Radiative", "Magnetoelectric", "Inductive", "Ultrasound"];
+const traces = modalities.map(mod => {
+  const rows = records.filter(r => r.modality === mod);
+  const s = styleByModality[mod];
+  return {
+    name: mod,
+    type: "scatter",
+    mode: "markers",
+    x: rows.map(r => r.depth),
+    y: rows.map(r => r.n_pte),
+    customdata: rows.map(r => [r.label, r.freq, r.area, r.pte]),
+    marker: {
+      symbol: s.symbol,
+      size: s.size,
+      color: s.fill,
+      line: { color: s.line, width: s.lineWidth }
+    },
+    hovertemplate:
+      "<b>%{customdata[0]}</b><br>" +
+      "Depth: %{x} mm<br>" +
+      "n_PTE: %{y}<br>" +
+      "Frequency: %{customdata[1]} MHz<br>" +
+      "RX Area: %{customdata[2]} mm²<br>" +
+      "PTE: %{customdata[3]} %" +
+      "<extra>" + mod + "</extra>"
+  };
+});
+
+const layout = {
+  margin: {l: 70, r: 30, t: 30, b: 60},
+  xaxis: {
+    title: {text: "Implant Depth [mm]"},
+    type: "linear",
+    gridcolor: "#eee",
+    zeroline: false,
+    showline: true,
+    linecolor: "#333",
+    mirror: true,
+    ticks: "outside"
+  },
+  yaxis: {
+    title: {text: "Normalized PTE (PTE/Size) [%/mm2]"},
+    type: "log",
+    gridcolor: "#eee",
+    zeroline: false,
+    showline: true,
+    linecolor: "#333",
+    mirror: true,
+    ticks: "outside"
+  },
+  legend: {
+    x: 1, y: 1, xanchor: "right", yanchor: "top",
+    bgcolor: "rgba(255,255,255,0.85)",
+    bordercolor: "#ccc", borderwidth: 1
+  },
+  hoverlabel: {
+    bgcolor: "white", bordercolor: "#888",
+    font: {family: "Helvetica Neue, Arial, sans-serif", size: 12, color: "#222"},
+    align: "left"
+  },
+  paper_bgcolor: "white",
+  plot_bgcolor: "white"
+};
+
+const config = {
+  responsive: true,
+  displaylogo: false,
+  scrollZoom: true,
+  toImageButtonOptions: {format: "png", filename: "WPT_modalities_scatter", scale: 2}
+};
+
+Plotly.newPlot("plot", traces, layout, config);
+
+document.querySelectorAll('input[name="xscale"]').forEach(el => {
+  el.addEventListener("change", e => Plotly.relayout("plot", {"xaxis.type": e.target.value}));
+});
+document.querySelectorAll('input[name="yscale"]').forEach(el => {
+  el.addEventListener("change", e => Plotly.relayout("plot", {"yaxis.type": e.target.value}));
+});
+</script>
+</body>
+</html>
